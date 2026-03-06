@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import crypto from 'crypto';
@@ -8,9 +9,10 @@ import authRoutes from './auth/routes.js';
 import { createToolRegistry } from './tools/registry.js';
 
 const PORT = process.env.PORT || 3000;
-const { definitions, handlers, TOOLS } = createToolRegistry();
+const { definitions, handlers } = createToolRegistry();
 
-const transports = {};
+const transports = {};       // Streamable HTTP sessions
+const sseTransports = {};    // SSE sessions
 
 function createMcpServer() {
   const server = new Server(
@@ -37,11 +39,17 @@ function createMcpServer() {
 const app = express();
 app.use(express.json());
 
-// Allow CORS for external MCP clients (ChatGPT, etc.)
+// Request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} Accept: ${req.headers.accept || 'none'}`);
+  next();
+});
+
+// CORS
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, mcp-session-id, ngrok-skip-browser-warning');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, mcp-session-id');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
@@ -81,30 +89,66 @@ app.post('/api/tools/:name', async (req, res) => {
   }
 });
 
-// ─── MCP Streamable HTTP Transport (Claude Desktop, ChatGPT, Cursor) ───
+// ─── SSE Transport (used by ChatGPT and older MCP clients) ───
 
-app.post('/mcp', async (req, res) => {
-  const sessionId = req.headers['mcp-session-id'];
+app.get('/sse', async (req, res) => {
+  console.log('[SSE] New client connected');
+  const transport = new SSEServerTransport('/messages', res);
+  const server = createMcpServer();
 
-  if (sessionId && transports[sessionId]) {
-    const transport = transports[sessionId];
-    await transport.handleRequest(req, res, req.body);
+  sseTransports[transport.sessionId] = { transport, server };
+
+  server.onclose = () => {
+    delete sseTransports[transport.sessionId];
+  };
+
+  await server.connect(transport);
+});
+
+app.post('/messages', async (req, res) => {
+  const sessionId = req.query.sessionId;
+  console.log(`[SSE] Message for session: ${sessionId}`);
+
+  const session = sseTransports[sessionId];
+  if (!session) {
+    res.status(400).json({ error: 'Invalid session. Connect to /sse first.' });
     return;
   }
 
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-  });
+  await session.transport.handlePostMessage(req, res, req.body);
+});
 
-  transport.onclose = () => {
-    const sid = transport.sessionId;
-    if (sid) delete transports[sid];
-  };
+// ─── Streamable HTTP Transport (newer MCP clients) ───
 
-  const server = createMcpServer();
-  await server.connect(transport);
-  if (transport.sessionId) transports[transport.sessionId] = transport;
-  await transport.handleRequest(req, res, req.body);
+app.post('/mcp', async (req, res) => {
+  try {
+    const sessionId = req.headers['mcp-session-id'];
+
+    if (sessionId && transports[sessionId]) {
+      const transport = transports[sessionId];
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+    });
+
+    transport.onclose = () => {
+      const sid = transport.sessionId;
+      if (sid) delete transports[sid];
+    };
+
+    const server = createMcpServer();
+    await server.connect(transport);
+    if (transport.sessionId) transports[transport.sessionId] = transport;
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error('[MCP] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ jsonrpc: '2.0', error: { code: -32000, message: err.message }, id: null });
+    }
+  }
 });
 
 app.get('/mcp', async (req, res) => {
@@ -129,7 +173,8 @@ app.delete('/mcp', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`[Dakota MCP] Server running on port ${PORT}`);
-  console.log(`[Dakota MCP] MCP endpoint: http://localhost:${PORT}/mcp`);
-  console.log(`[Dakota MCP] REST test API: http://localhost:${PORT}/api/tools`);
-  console.log(`[Dakota MCP] Health: http://localhost:${PORT}/health`);
+  console.log(`[Dakota MCP] Streamable HTTP: http://localhost:${PORT}/mcp`);
+  console.log(`[Dakota MCP] SSE transport:    http://localhost:${PORT}/sse`);
+  console.log(`[Dakota MCP] REST test API:    http://localhost:${PORT}/api/tools`);
+  console.log(`[Dakota MCP] Health:           http://localhost:${PORT}/health`);
 });
