@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: dakota-mcp-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: USE_MOCK
+        value: "true"
+      - key: PORT
+        value: "10000"
+      - key: SESSION_SECRET
+        value: render-session-secret-change-in-production
