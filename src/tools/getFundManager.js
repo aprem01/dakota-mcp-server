@@ -13,7 +13,6 @@ export const getFundManagerDefinition = {
         type: 'string',
         description: 'The Salesforce record ID of the fund manager',
       },
-      },
     },
     required: ['record_id'],
   },
