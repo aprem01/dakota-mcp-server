@@ -13,9 +13,8 @@ export const getFundDefinition = {
         type: 'string',
         description: 'The Salesforce record ID of the fund',
       },
-      session_id: { type: 'string', description: 'Your authenticated session ID' },
     },
-    required: ['record_id', 'session_id'],
+    required: ['record_id'],
   },
 };
 

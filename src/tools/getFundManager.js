@@ -13,12 +13,9 @@ export const getFundManagerDefinition = {
         type: 'string',
         description: 'The Salesforce record ID of the fund manager',
       },
-      session_id: {
-        type: 'string',
-        description: 'Your authenticated session ID',
       },
     },
-    required: ['record_id', 'session_id'],
+    required: ['record_id'],
   },
 };
 

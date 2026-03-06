@@ -16,9 +16,8 @@ export const searchMarketplaceDefinition = {
         type: 'number',
         description: 'Maximum results per object type (default 10, max 50)',
       },
-      session_id: { type: 'string', description: 'Your authenticated session ID' },
     },
-    required: ['query', 'session_id'],
+    required: ['query'],
   },
 };
 

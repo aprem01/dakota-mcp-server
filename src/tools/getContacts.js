@@ -20,9 +20,8 @@ export const getContactsDefinition = {
         type: 'number',
         description: 'Maximum results (default 50, max 200)',
       },
-      session_id: { type: 'string', description: 'Your authenticated session ID' },
     },
-    required: ['account_id', 'session_id'],
+    required: ['account_id'],
   },
 };
 

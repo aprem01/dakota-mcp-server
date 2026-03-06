@@ -32,12 +32,9 @@ export const searchFundManagersDefinition = {
         type: 'number',
         description: 'Maximum number of results to return (default 25, max 100)',
       },
-      session_id: {
-        type: 'string',
-        description: 'Your authenticated session ID',
       },
     },
-    required: ['session_id'],
+    required: [],
   },
 };
 

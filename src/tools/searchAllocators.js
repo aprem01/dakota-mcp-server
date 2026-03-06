@@ -32,9 +32,8 @@ export const searchAllocatorsDefinition = {
         type: 'number',
         description: 'Maximum results (default 25, max 100)',
       },
-      session_id: { type: 'string', description: 'Your authenticated session ID' },
     },
-    required: ['session_id'],
+    required: [],
   },
 };
 
